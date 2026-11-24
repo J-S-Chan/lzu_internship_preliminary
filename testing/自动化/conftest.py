@@ -7,7 +7,9 @@ from pathlib import Path
 import pytest
 import requests
 
-BASE_URL = os.environ.get("SUT_BASE_URL", "http://127.0.0.1:18081")
+EXTERNAL_BASE_URL = os.environ.get("SUT_BASE_URL")
+DEFAULT_BASE_URL = "http://127.0.0.1:18081"
+BASE_URL = EXTERNAL_BASE_URL or DEFAULT_BASE_URL
 
 ROOT = Path(__file__).resolve().parents[2]
 SUT_PATH = ROOT / "testing" / "sut" / "app.py"
@@ -32,20 +34,28 @@ def sut():
     already_running = _health_ready(external_client)
     external_client.close()
 
+    if EXTERNAL_BASE_URL:
+        if not already_running:
+            raise RuntimeError(
+                f"SUT_BASE_URL={EXTERNAL_BASE_URL} 未启动或健康检查失败，"
+                "请先启动对应服务后再运行测试"
+            )
+        yield BASE_URL
+        return
+
     process = None
-    if not already_running:
-        process = subprocess.Popen(
-            [
-                sys.executable,
-                str(SUT_PATH),
-                "--host",
-                "127.0.0.1",
-                "--port",
-                "18081",
-            ],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
+    process = subprocess.Popen(
+        [
+            sys.executable,
+            str(SUT_PATH),
+            "--host",
+            "127.0.0.1",
+            "--port",
+            "18081",
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+    )
 
     probe = requests.Session()
     deadline = time.time() + 8
@@ -64,12 +74,11 @@ def sut():
 
     yield BASE_URL
 
-    if process is not None:
-        process.terminate()
-        try:
-            process.wait(timeout=3)
-        except subprocess.TimeoutExpired:
-            process.kill()
+    process.terminate()
+    try:
+        process.wait(timeout=3)
+    except subprocess.TimeoutExpired:
+        process.kill()
 
 
 @pytest.fixture(scope="session")
