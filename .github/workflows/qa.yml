@@ -62,7 +62,7 @@ jobs:
 
           (
             cd testing/自动化
-            pytest -q --junitxml=reports/pytest.xml
+            SUT_BASE_URL=http://127.0.0.1:18081 pytest -q --junitxml=reports/pytest.xml
           )
 
       - name: Upload test artifacts
